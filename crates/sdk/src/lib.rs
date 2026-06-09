@@ -89,11 +89,11 @@ pub use crate::error::{
 pub use temporalio_client::Namespace;
 pub use temporalio_workflow::{
     ActivityCloseTimeouts, ActivityOptions, BaseWorkflowContext, CancellableFuture,
-    ChildWorkflowOptions, ContinueAsNewOptions, ExternalWorkflowHandle, LocalActivityOptions,
-    NexusOperationOptions, ParentWorkflowInfo, RootWorkflowInfo, Signal, SignalData,
-    StartChildWorkflowExecutionFailedCause, StartedChildWorkflow, SyncWorkflowContext,
-    TimerOptions, TimerResult, WorkflowContext, WorkflowContextView, WorkflowResult,
-    WorkflowTermination,
+    ChildWorkflowOptions, ContinueAsNewOptions, ContinueAsNewVersioningBehavior,
+    ExternalWorkflowHandle, LocalActivityOptions, NexusOperationOptions, ParentWorkflowInfo,
+    RootWorkflowInfo, Signal, SignalData, StartChildWorkflowExecutionFailedCause,
+    StartedChildWorkflow, SyncWorkflowContext, TimerOptions, TimerResult, WorkflowContext,
+    WorkflowContextView, WorkflowResult, WorkflowTermination,
 };
 #[cfg(feature = "wasm-workflows")]
 pub use workflow_wasm::WasmWorkflowComponent;

@@ -2,7 +2,8 @@ mod options;
 
 pub use options::{
     ActivityCloseTimeouts, ActivityOptions, ChildWorkflowOptions, ContinueAsNewOptions,
-    LocalActivityOptions, NexusOperationOptions, Signal, SignalData, TimerOptions,
+    ContinueAsNewVersioningBehavior, LocalActivityOptions, NexusOperationOptions, Signal,
+    SignalData, TimerOptions,
 };
 pub use temporalio_common_wasm::protos::coresdk::child_workflow::StartChildWorkflowExecutionFailedCause;
 
@@ -812,6 +813,18 @@ impl<W> SyncWorkflowContext<W> {
             .continue_as_new_suggested
     }
 
+    /// Returns true if the workflow's target worker deployment version changed.
+    ///
+    /// This experimental signal is intended for workers using worker deployment versioning.
+    pub fn target_worker_deployment_version_changed(&self) -> bool {
+        self.base
+            .inner
+            .shared
+            .borrow()
+            .activation
+            .target_worker_deployment_version_changed
+    }
+
     /// Returns the headers for the current handler invocation (signal, update, query, etc.).
     ///
     /// When called from within a signal handler, returns the headers that were sent with that
@@ -1154,6 +1167,13 @@ impl<W> WorkflowContext<W> {
     /// Returns true if the server suggests this workflow should continue-as-new
     pub fn continue_as_new_suggested(&self) -> bool {
         self.sync.continue_as_new_suggested()
+    }
+
+    /// Returns true if the workflow's target worker deployment version changed.
+    ///
+    /// This experimental signal is intended for workers using worker deployment versioning.
+    pub fn target_worker_deployment_version_changed(&self) -> bool {
+        self.sync.target_worker_deployment_version_changed()
     }
 
     /// Returns the headers for the current handler invocation (signal, update, query, etc.).
@@ -2349,7 +2369,7 @@ mod tests {
             },
             temporal::api::{
                 common::v1::{Payload, RetryPolicy},
-                enums::v1::ContinueAsNewVersioningBehavior,
+                enums::v1::ContinueAsNewVersioningBehavior as ProtoContinueAsNewVersioningBehavior,
             },
         },
     };
@@ -2419,7 +2439,8 @@ mod tests {
                 search_attributes: None,
                 retry_policy: None,
                 versioning_intent: ProtoVersioningIntent::Unspecified.into(),
-                initial_versioning_behavior: ContinueAsNewVersioningBehavior::Unspecified.into(),
+                initial_versioning_behavior: ProtoContinueAsNewVersioningBehavior::Unspecified
+                    .into(),
             }
         );
     }
@@ -2460,6 +2481,9 @@ mod tests {
                         ..Default::default()
                     }),
                     versioning_intent: Some(ProtoVersioningIntent::Compatible),
+                    initial_versioning_behavior: Some(
+                        ContinueAsNewVersioningBehavior::UseRampingVersion,
+                    ),
                 },
             )
             .expect_err("continue_as_new should terminate the workflow");
@@ -2487,7 +2511,8 @@ mod tests {
                     ..Default::default()
                 }),
                 versioning_intent: ProtoVersioningIntent::Compatible.into(),
-                initial_versioning_behavior: ContinueAsNewVersioningBehavior::Unspecified.into(),
+                initial_versioning_behavior: ProtoContinueAsNewVersioningBehavior::UseRampingVersion
+                    as i32,
             }
         );
     }
@@ -2511,6 +2536,29 @@ mod tests {
         };
 
         assert_eq!(cmd.search_attributes, Some(SearchAttributes::default()));
+    }
+
+    #[test]
+    fn workflow_context_continue_as_new_applies_auto_upgrade_versioning_behavior() {
+        let ctx = test_context();
+
+        let termination = ctx
+            .continue_as_new(
+                &13,
+                ContinueAsNewOptions {
+                    initial_versioning_behavior: Some(ContinueAsNewVersioningBehavior::AutoUpgrade),
+                    ..Default::default()
+                },
+            )
+            .expect_err("continue_as_new should terminate the workflow");
+        let WorkflowTermination::ContinueAsNew(cmd) = termination else {
+            unreachable!()
+        };
+
+        assert_eq!(
+            cmd.initial_versioning_behavior,
+            ProtoContinueAsNewVersioningBehavior::AutoUpgrade as i32
+        );
     }
 
     #[test]
