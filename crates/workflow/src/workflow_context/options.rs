@@ -19,7 +19,7 @@ use temporalio_common_wasm::{
             },
         },
         temporal::api::{
-            common::v1::{Payload, RetryPolicy, SearchAttributes},
+            common::v1::{Payload, RetryPolicy},
             enums::v1::{
                 ContinueAsNewVersioningBehavior as ProtoContinueAsNewVersioningBehavior,
                 WorkflowIdReusePolicy,
@@ -27,6 +27,7 @@ use temporalio_common_wasm::{
             sdk::v1::UserMetadata,
         },
     },
+    search_attributes::SearchAttributes,
 };
 /// Options for scheduling an activity
 #[derive(Debug, bon::Builder, Clone)]
@@ -281,8 +282,8 @@ pub struct ChildWorkflowOptions {
     pub task_timeout: Option<Duration>,
     /// Optionally set a cron schedule for the workflow
     pub cron_schedule: Option<String>,
-    /// Optionally associate extra search attributes with a workflow
-    pub search_attributes: Option<HashMap<String, Payload>>,
+    /// Additional search attributes to set on the child workflow.
+    pub search_attributes: Option<SearchAttributes>,
     /// Priority for the workflow
     pub priority: Option<Priority>,
 }
@@ -318,11 +319,7 @@ impl ChildWorkflowOptions {
                     .task_timeout
                     .and_then(|duration| duration.try_into().ok()),
                 cron_schedule: self.cron_schedule.unwrap_or_default(),
-                search_attributes: self.search_attributes.and_then(|attrs| {
-                    (!attrs.is_empty()).then_some(SearchAttributes {
-                        indexed_fields: attrs,
-                    })
-                }),
+                search_attributes: self.search_attributes.map(|t| t.into_proto()),
                 priority: self.priority.map(Into::into),
                 ..Default::default()
             }),
@@ -597,7 +594,7 @@ impl ContinueAsNewOptions {
                 .and_then(|duration| duration.try_into().ok()),
             memo: self.memo.unwrap_or_default(),
             headers: self.headers.unwrap_or_default(),
-            search_attributes: self.search_attributes,
+            search_attributes: self.search_attributes.map(|t| t.into_proto()),
             retry_policy: self.retry_policy,
             versioning_intent: self
                 .versioning_intent

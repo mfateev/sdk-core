@@ -23,11 +23,10 @@ use futures_util::{
     task::Context,
 };
 use std::{
-    cell::{Cell, Ref, RefCell},
+    cell::{Cell, RefCell},
     collections::HashMap,
     future::{self, Future},
     marker::PhantomData,
-    ops::Deref,
     pin::Pin,
     rc::Rc,
     sync::atomic::{AtomicBool, Ordering},
@@ -67,11 +66,12 @@ use temporalio_common_wasm::{
             },
         },
         temporal::api::{
-            common::v1::{Memo, Payload, SearchAttributes},
+            common::v1::{Memo, Payload, SearchAttributes as ProtoSearchAttributes},
             failure::v1::{CanceledFailureInfo, Failure, failure::FailureInfo},
         },
         utilities::TryIntoOrNone,
     },
+    search_attributes::{SearchAttributeUpdate, SearchAttributes},
     worker::WorkerDeploymentVersion,
 };
 
@@ -315,7 +315,7 @@ pub struct WorkflowContextView {
     pub cron_schedule: Option<String>,
     /// User-defined memo
     pub memo: Option<Memo>,
-    /// Initial search attributes
+    /// Initial search attributes as a typed collection.
     pub search_attributes: Option<SearchAttributes>,
 }
 
@@ -395,7 +395,10 @@ impl WorkflowContextView {
             retry_policy: init.retry_policy.clone(),
             cron_schedule,
             memo: init.memo.clone(),
-            search_attributes: init.search_attributes.clone(),
+            search_attributes: init
+                .search_attributes
+                .as_ref()
+                .map(SearchAttributes::from_proto),
         }
     }
 }
@@ -790,9 +793,9 @@ impl<W> SyncWorkflowContext<W> {
             .map(Into::into)
     }
 
-    /// Return current values for workflow search attributes
-    pub fn search_attributes(&self) -> impl Deref<Target = SearchAttributes> + '_ {
-        Ref::map(self.base.inner.shared.borrow(), |s| &s.search_attributes)
+    /// Return current values for workflow search attributes.
+    pub fn search_attributes(&self) -> SearchAttributes {
+        SearchAttributes::from_proto(&self.base.inner.shared.borrow().search_attributes)
     }
 
     /// Return the workflow's randomness seed
@@ -996,14 +999,35 @@ impl<W> SyncWorkflowContext<W> {
         }
     }
 
-    /// Add or create a set of search attributes
-    pub fn upsert_search_attributes(&self, attr_iter: impl IntoIterator<Item = (String, Payload)>) {
+    /// Add, update, or remove search attributes using typed keys.
+    ///
+    /// Updates are applied to the local in-memory view immediately so that
+    /// subsequent calls to [`search_attributes()`](Self::search_attributes)
+    /// reflect the changes. The command is also sent to the server.
+    pub fn upsert_search_attributes(
+        &self,
+        updates: impl IntoIterator<Item = SearchAttributeUpdate>,
+    ) {
+        // Collect so we can iterate twice: once for local state, once for the
+        // wire proto (which uses a different encoding for "unset").
+        let updates: Vec<SearchAttributeUpdate> = updates.into_iter().collect();
+
+        // Update local state using the typed API, which correctly removes keys
+        // on unset (rather than inserting empty payloads like the wire format).
+        {
+            let mut shared = self.base.inner.shared.borrow_mut();
+            let mut attrs = SearchAttributes::from_proto(&shared.search_attributes);
+            for update in updates.iter().cloned() {
+                attrs.apply(update);
+            }
+            shared.search_attributes = attrs.into_proto();
+        }
+
+        let proto = SearchAttributes::updates_to_proto(updates);
         self.base.inner.runtime.host.push_command(
             workflow_command::Variant::UpsertWorkflowSearchAttributes(
                 UpsertWorkflowSearchAttributes {
-                    search_attributes: Some(SearchAttributes {
-                        indexed_fields: attr_iter.into_iter().collect(),
-                    }),
+                    search_attributes: Some(proto),
                 },
             )
             .into(),
@@ -1151,8 +1175,8 @@ impl<W> WorkflowContext<W> {
         self.sync.current_deployment_version()
     }
 
-    /// Return current values for workflow search attributes
-    pub fn search_attributes(&self) -> impl Deref<Target = SearchAttributes> + '_ {
+    /// Return current values for workflow search attributes.
+    pub fn search_attributes(&self) -> SearchAttributes {
         self.sync.search_attributes()
     }
 
@@ -1276,9 +1300,12 @@ impl<W> WorkflowContext<W> {
         self.sync.external_workflow(workflow_id, run_id)
     }
 
-    /// Add or create a set of search attributes
-    pub fn upsert_search_attributes(&self, attr_iter: impl IntoIterator<Item = (String, Payload)>) {
-        self.sync.upsert_search_attributes(attr_iter)
+    /// Add, update, or remove search attributes using typed keys.
+    pub fn upsert_search_attributes(
+        &self,
+        updates: impl IntoIterator<Item = SearchAttributeUpdate>,
+    ) {
+        self.sync.upsert_search_attributes(updates)
     }
 
     /// Add or create a set of memo fields
@@ -1414,7 +1441,7 @@ struct WorkflowContextSharedData {
     /// Maps change ids -> resolved status
     changes: HashMap<String, bool>,
     activation: CoreWorkflowActivation,
-    search_attributes: SearchAttributes,
+    search_attributes: ProtoSearchAttributes,
     random_seed: u64,
     /// Current details string, surfaced via the workflow metadata query.
     current_details: String,
@@ -2413,11 +2440,12 @@ mod tests {
             "header-key".to_string(),
             Payload::from(b"header-value".as_slice()),
         );
-        let mut search_attributes = SearchAttributes::default();
-        search_attributes.indexed_fields.insert(
+        let mut proto_search_attributes = ProtoSearchAttributes::default();
+        proto_search_attributes.indexed_fields.insert(
             "CustomKeywordField".to_string(),
             Payload::from(b"value".as_slice()),
         );
+        let search_attributes = SearchAttributes::from_proto(&proto_search_attributes);
 
         let termination = sync
             .continue_as_new(
@@ -2461,7 +2489,7 @@ mod tests {
                 backoff_start_interval: Some(Duration::from_secs(4).try_into().unwrap()),
                 memo,
                 headers,
-                search_attributes: Some(search_attributes),
+                search_attributes: Some(proto_search_attributes),
                 retry_policy: Some(RetryPolicy {
                     maximum_attempts: 5,
                     ..Default::default()
@@ -2491,7 +2519,10 @@ mod tests {
             unreachable!()
         };
 
-        assert_eq!(cmd.search_attributes, Some(SearchAttributes::default()));
+        assert_eq!(
+            cmd.search_attributes,
+            Some(ProtoSearchAttributes::default())
+        );
     }
 
     #[test]
@@ -2583,5 +2614,107 @@ mod tests {
             panic!("expected failed termination, got {err:?}");
         };
         assert_eq!(err.to_string(), "Encoding error: serialization failure");
+    }
+
+    #[test]
+    fn upsert_search_attributes_updates_local_state() {
+        use temporalio_common_wasm::search_attributes::SearchAttributeKey;
+
+        const K: SearchAttributeKey<i64> = SearchAttributeKey::int("my_int");
+
+        let ctx = test_context();
+        assert!(ctx.search_attributes().is_empty());
+
+        ctx.upsert_search_attributes([K.value_set(42)]);
+        let attrs = ctx.search_attributes();
+        assert_eq!(attrs.get(&K), Some(42));
+    }
+
+    #[test]
+    fn upsert_search_attributes_unset_removes_from_local_state() {
+        use temporalio_common_wasm::search_attributes::SearchAttributeKey;
+
+        const K: SearchAttributeKey<String> = SearchAttributeKey::keyword("my_kw");
+
+        let ctx = test_context();
+        // Set, then unset.
+        ctx.upsert_search_attributes([K.value_set("hello".into())]);
+        assert_eq!(ctx.search_attributes().get(&K), Some("hello".into()));
+
+        ctx.upsert_search_attributes([K.value_unset()]);
+        assert!(!ctx.search_attributes().contains_key(&K));
+        assert!(ctx.search_attributes().is_empty());
+    }
+
+    #[test]
+    fn upsert_search_attributes_multiple_updates_last_wins() {
+        use temporalio_common_wasm::search_attributes::SearchAttributeKey;
+
+        const K: SearchAttributeKey<i64> = SearchAttributeKey::int("counter");
+
+        let ctx = test_context();
+        ctx.upsert_search_attributes([K.value_set(1), K.value_set(2)]);
+        assert_eq!(ctx.search_attributes().get(&K), Some(2));
+    }
+
+    #[test]
+    fn upsert_search_attributes_merges_with_initial() {
+        use temporalio_common_wasm::search_attributes::SearchAttributeKey;
+
+        const A: SearchAttributeKey<i64> = SearchAttributeKey::int("attr_a");
+        const B: SearchAttributeKey<String> = SearchAttributeKey::keyword("attr_b");
+
+        // Start with initial search attribute A.
+        let init_sa = SearchAttributes::new([A.value_set(1)]).into_proto();
+        let init = InitializeWorkflow {
+            workflow_type: TestWorkflow.name().to_string(),
+            search_attributes: Some(init_sa),
+            ..Default::default()
+        };
+        let base = BaseWorkflowContext::new(
+            "default".to_string(),
+            "tq".to_string(),
+            "run-id".to_string(),
+            init,
+            DataConverter::default(),
+            Rc::new(NoopHost),
+        );
+        let ctx = WorkflowContext::from_base(base, Rc::new(RefCell::new(TestWorkflow)));
+
+        assert_eq!(ctx.search_attributes().get(&A), Some(1));
+
+        // Upsert B — A should still be present.
+        ctx.upsert_search_attributes([B.value_set("hello".into())]);
+        assert_eq!(ctx.search_attributes().get(&A), Some(1));
+        assert_eq!(ctx.search_attributes().get(&B), Some("hello".into()));
+    }
+
+    #[test]
+    fn view_search_attributes_returns_typed() {
+        use temporalio_common_wasm::search_attributes::SearchAttributeKey;
+
+        const K: SearchAttributeKey<bool> = SearchAttributeKey::bool("active");
+
+        let init_sa = SearchAttributes::new([K.value_set(true)]).into_proto();
+        let init = InitializeWorkflow {
+            workflow_type: TestWorkflow.name().to_string(),
+            search_attributes: Some(init_sa),
+            ..Default::default()
+        };
+        let base = BaseWorkflowContext::new(
+            "default".to_string(),
+            "tq".to_string(),
+            "run-id".to_string(),
+            init,
+            DataConverter::default(),
+            Rc::new(NoopHost),
+        );
+        let ctx = WorkflowContext::from_base(base, Rc::new(RefCell::new(TestWorkflow)));
+
+        let view = ctx.view();
+        let sa = view
+            .search_attributes
+            .expect("should have search attributes");
+        assert_eq!(sa.get(&K), Some(true));
     }
 }
