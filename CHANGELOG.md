@@ -51,6 +51,11 @@ to docs, or any other relevant information.
 
 ## [Unreleased]
 
+### Added
+* Schedule descriptions now expose their configured action via `ScheduleDescription::action()`,
+  including start-workflow accessors for workflow type, task queue, workflow ID, raw argument
+  payloads, and typed argument decoding through the client's data converter.
+
 ### Breaking Changes
 * `WorkflowExecution::search_attributes`, `WorkflowExecutionDescription::search_attributes`,
   `ScheduleDescription::search_attributes`, and `ScheduleSummary::search_attributes` now return
