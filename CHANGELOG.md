@@ -93,7 +93,16 @@ to docs, or any other relevant information.
   `from_raw`.
 * Workflow count aggregation groups now provide positional typed `get` and `try_get` accessors
   for search attribute group values over raw payload access.
-
+* Payload/memo size-limit enforcement (experimental), on by default. Workers now proactively
+  validate outbound payload/memo sizes against namespace limits before sending to the server.
+  If payload/memo-bearing fields exceed the warn threshold, the worker logs a warning; if over the
+  error limit, the task completion is failed retryably instead of sent to the server. Both cases log
+  `[TMPRL1103]` (at `WARN` and `ERROR` respectively).
+  Previously these were sent and the server terminated the workflow / failed the activity
+  non-retryably; failing retryably instead lets a corrected workflow or activity be redeployed and
+  recover. A deterministically-oversized completion now retries per its retry policy rather than
+  failing fast. Tune warn thresholds via `PayloadLimitsOptions`. Opt out of worker error enforcement
+  with `WorkerOptions::disable_payload_error_limit`.
 
 ### Fixed
 * Workflow tasks no longer livelock when a burst of ready async operations exhausts Tokio's
