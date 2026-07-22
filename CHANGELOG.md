@@ -63,6 +63,9 @@ to docs, or any other relevant information.
   payloads, and typed argument decoding through the client's data converter.
 * Added the experimental `WorkerOptions::patch_activation_callback` option for controlling whether
   newly introduced patches activate during rolling deployments.
+* `WorkflowContext::random` and `WorkflowContext::uuid4` for deterministic randomness in workflow.
+* `ChildWorkflowOptions::builder` and `ChildWorkflowOptions::workflow_id` for constructing
+  child workflow options.
 
 ### Breaking Changes
 * `WorkflowExecution::search_attributes`, `WorkflowExecutionDescription::search_attributes`,
@@ -111,6 +114,12 @@ to docs, or any other relevant information.
   recover. A deterministically-oversized completion now retries per its retry policy rather than
   failing fast. Tune warn thresholds via `PayloadLimitsOptions`. Opt out of worker error enforcement
   with `WorkerOptions::disable_payload_error_limit`.
+* `WorkflowContext::random_seed()` and `SyncWorkflowContext::random_seed()` have been removed.
+  Use `random::<T>()` or `uuid4()` for deterministic workflow randomness instead.
+* `ChildWorkflowOptions::workflow_id` is now `Option<String>`. Wrap explicit IDs in `Some(...)`;
+  when omitted, the parent workflow generates a UUID child workflow ID.
+* `ChildWorkflowOptions` is now tagged with `#[non_exhaustive]` so additional fields will not be breaking
+  changes. Users should switch to `ChildWorkflowOptions::builder()` for constructing these options.
 
 ### Fixed
 * Workflow tasks no longer livelock when a burst of ready async operations exhausts Tokio's
