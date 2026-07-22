@@ -65,7 +65,7 @@ impl GreetingWorkflow {
         let name = ctx.state(|s| s.name.clone());
 
         // Execute an activity
-        let greeting = ctx.start_activity(
+        let greeting = ctx.execute_activity(
             MyActivities::greet,
             name,
             ActivityOptions::start_to_close_timeout(Duration::from_secs(10))
@@ -297,7 +297,7 @@ Activities return `Result<T, ActivityError>` with the following error types:
 For short-lived activities that you want to run on the same worker as the workflow:
 
 ```rust
-ctx.start_local_activity(
+ctx.execute_local_activity(
     MyActivities::quick_operation,
     input,
     LocalActivityOptions {

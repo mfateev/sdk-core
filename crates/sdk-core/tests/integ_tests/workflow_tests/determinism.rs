@@ -52,7 +52,7 @@ impl TimerWfNondeterministic {
                 }
             }
             2 => {
-                ctx.start_activity(
+                ctx.execute_activity(
                     StdActivities::default,
                     (),
                     ActivityOptions::start_to_close_timeout(Duration::from_secs(5)),
@@ -105,7 +105,7 @@ impl TaskFailReplayWf {
             assert!(ctx.is_replaying());
         }
         let _ = ctx
-            .start_activity(
+            .execute_activity(
                 StdActivities::echo,
                 "hi!".to_string(),
                 ActivityOptions::start_to_close_timeout(Duration::from_secs(2)),
@@ -330,7 +330,7 @@ impl ActivityIdOrTypeChangeWf {
     ) -> WorkflowResult<()> {
         if local_act {
             if id_change {
-                ctx.start_local_activity(
+                ctx.execute_local_activity(
                     StdActivities::default,
                     (),
                     LocalActivityOptions {
@@ -340,11 +340,11 @@ impl ActivityIdOrTypeChangeWf {
                 )
                 .await?;
             } else {
-                ctx.start_local_activity(StdActivities::no_op, (), Default::default())
+                ctx.execute_local_activity(StdActivities::no_op, (), Default::default())
                     .await?;
             }
         } else if id_change {
-            ctx.start_activity(
+            ctx.execute_activity(
                 StdActivities::default,
                 (),
                 ActivityOptions::with_start_to_close_timeout(Duration::from_secs(5))
@@ -353,7 +353,7 @@ impl ActivityIdOrTypeChangeWf {
             )
             .await?;
         } else {
-            ctx.start_activity(
+            ctx.execute_activity(
                 StdActivities::no_op,
                 (),
                 ActivityOptions::start_to_close_timeout(Duration::from_secs(5)),
