@@ -245,6 +245,10 @@ pub struct WorkerOptions {
     /// would cause it to exceed this limit. Negative, zero, or NaN values will cause building
     /// the options to fail.
     pub max_worker_activities_per_second: Option<f64>,
+    /// Maximum number of activity slots that may be reserved for eager execution when completing
+    /// a workflow task. The default is 3. Setting this to zero disables eager activity execution.
+    #[builder(default = 3)]
+    pub max_eager_activity_reservations_per_workflow_task: usize,
     /// Any error types listed here will cause any workflow being processed by this worker to fail,
     /// rather than simply failing the workflow task.
     #[builder(default)]
@@ -438,6 +442,9 @@ impl WorkerOptions {
             .default_heartbeat_throttle_interval(self.default_heartbeat_throttle_interval)
             .maybe_max_task_queue_activities_per_second(self.max_task_queue_activities_per_second)
             .maybe_max_worker_activities_per_second(self.max_worker_activities_per_second)
+            .max_eager_activity_reservations_per_workflow_task(
+                self.max_eager_activity_reservations_per_workflow_task,
+            )
             .maybe_graceful_shutdown_period(self.graceful_shutdown_period)
             .versioning_strategy(WorkerVersioningStrategy::WorkerDeploymentBased(
                 self.deployment_options.clone(),
@@ -1414,5 +1421,16 @@ mod tests {
             .to_core_options("ns".into(), String::new())
             .unwrap();
         assert_eq!(config.disable_payload_error_limit, expected);
+    }
+
+    #[test]
+    fn max_eager_activity_reservations_per_workflow_task_propagates() {
+        let config = WorkerOptions::new("task_q")
+            .task_types(WorkerTaskTypes::activity_only())
+            .max_eager_activity_reservations_per_workflow_task(7)
+            .build()
+            .to_core_options("ns".into(), String::new())
+            .unwrap();
+        assert_eq!(config.max_eager_activity_reservations_per_workflow_task, 7);
     }
 }
