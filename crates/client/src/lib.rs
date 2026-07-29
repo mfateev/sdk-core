@@ -240,6 +240,7 @@ impl Connection {
                 options.keep_alive.clone(),
                 options.override_origin.clone(),
                 dns_opts.resolution_interval,
+                options.connect_timeout,
             );
             (
                 ServiceBuilder::new()
@@ -253,6 +254,11 @@ impl Connection {
             )
         } else {
             let channel = Endpoint::from_shared(options.target.to_string())?;
+            let channel = if let Some(timeout) = options.connect_timeout {
+                channel.connect_timeout(timeout)
+            } else {
+                channel
+            };
             let channel = add_tls_to_channel(options.tls_options.as_ref(), channel).await?;
             let channel = if let Some(keep_alive) = options.keep_alive.as_ref() {
                 channel
@@ -1460,6 +1466,7 @@ mod tests {
     use super::*;
     use crate::callback_based::CallbackBasedGrpcService;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Instant;
     use temporalio_common::search_attributes::SearchAttributeKey;
     use tonic::{Status, metadata::Ascii};
     use url::Url;
@@ -1708,6 +1715,18 @@ mod tests {
                     && status.message() == "backend temporarily unimplemented"
         ));
         assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn connect_timeout_bounds_connection_attempt() {
+        let url = Url::parse("http://10.255.255.1:7233").unwrap();
+        let opts = ConnectionOptions::new(url)
+            .connect_timeout(Duration::from_millis(500))
+            .build();
+        let start = Instant::now();
+        let result = Connection::connect(opts).await;
+        assert!(result.is_err(), "connection should fail");
+        assert!(start.elapsed() < Duration::from_secs(2));
     }
 
     mod tls_custom_verifier_tests {
