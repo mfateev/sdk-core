@@ -54,7 +54,7 @@ impl InboundInterceptorWorkflow {
         ctx.wait_condition(|state| {
             state.signal_value.is_some() && state.update_value.is_some() && state.finish
         })
-        .await;
+        .await?;
         Ok("run-original-output".to_string())
     }
 
@@ -547,7 +547,7 @@ impl InterceptorConstructionPollingWorkflow {
         ctx.wait_condition(|state| {
             state.sync_signal_handled && state.deferred_signal_handled && state.async_signal_handled
         })
-        .await;
+        .await?;
         Ok(())
     }
 
@@ -634,7 +634,7 @@ struct ConstructionWakeHandlerWorkflow {
 impl ConstructionWakeHandlerWorkflow {
     #[run]
     async fn run(ctx: &mut WorkflowContext<Self>) -> WorkflowResult<()> {
-        ctx.wait_condition(|state| state.handled).await;
+        ctx.wait_condition(|state| state.handled).await?;
         Ok(())
     }
 

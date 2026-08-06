@@ -338,7 +338,7 @@ impl CancelledChildGetsReasonChild {
     #[run(name = "child_wf")]
     async fn run(ctx: &mut WorkflowContext<Self>) -> WorkflowResult<String> {
         let r = ctx.cancelled().await;
-        Ok(r)
+        Ok(r.unwrap_or_default())
     }
 }
 
@@ -388,11 +388,12 @@ impl SignalChildWorkflowWf {
         let serial = ctx.state(|wf| wf.serial);
         if serial {
             start_res
-                .signal(UnusedChildWf::signal, "Hi!".to_string())
+                .signal(UnusedChildWf::signal, "Hi!".to_string(), Default::default())
                 .await?;
             start_res.result().await?;
         } else {
-            let sigfut = start_res.signal(UnusedChildWf::signal, "Hi!".to_string());
+            let sigfut =
+                start_res.signal(UnusedChildWf::signal, "Hi!".to_string(), Default::default());
             let resfut = start_res.result();
             let (sigres, res) = join!(sigfut, resfut);
             sigres?;
@@ -1390,7 +1391,11 @@ impl ChildSignalSerializationFailParent {
             .await?;
 
         let signal_result = started
-            .signal(UnserializableSignalChild::bad_signal, AlwaysFailsSerialize)
+            .signal(
+                UnserializableSignalChild::bad_signal,
+                AlwaysFailsSerialize,
+                Default::default(),
+            )
             .await;
         assert_matches!(signal_result, Err(WorkflowSignalError::Serialization(_)));
 
@@ -1538,7 +1543,7 @@ impl CancelExternalTarget {
     #[run]
     async fn run(ctx: &mut WorkflowContext<Self>) -> WorkflowResult<String> {
         let r = ctx.cancelled().await;
-        Ok(r)
+        Ok(r.unwrap_or_default())
     }
 }
 
