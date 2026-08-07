@@ -20,6 +20,10 @@ to docs, or any other relevant information.
 ## Unreleased
 
 ### Added
+* Worker heartbeats now report the SDK runtime, hosting environments, operating system, and
+  architecture once per worker, retrying until the first successful delivery. Runtime options can
+  disable this reporting, and language SDK bridges can supply their own runtime details. The Rust
+  SDK exposes separate runtime options that omit bridge-only runtime overrides.
 * `RpcOptions::builder()` for constructing per-call RPC options.
 * `DnsLoadBalancingOptions::builder()` for configuring DNS re-resolution intervals.
 

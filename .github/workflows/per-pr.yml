@@ -207,6 +207,31 @@ jobs:
         with:
           compose-file: ./etc/docker/docker-compose-ci.yaml
       - run: cargo integ-test docker_
+        env:
+          TMPDIR: ${{ runner.temp }}
+      - name: Verify worker environment detection inside Docker
+        run: |
+          integ_test_binary="$(
+            find "$GITHUB_WORKSPACE/target/debug/deps" -maxdepth 1 -type f \
+              -name 'integ_tests-*' -perm -111 \
+              -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-
+          )"
+          integ_runner_binary="$(
+            find "$GITHUB_WORKSPACE/target/debug/deps" -maxdepth 1 -type f \
+              -name 'integ_runner-*' -perm -111 \
+              -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-
+          )"
+          test -x "$integ_test_binary"
+          test -x "$integ_runner_binary"
+          docker run --rm \
+            --env TMPDIR="$RUNNER_TEMP" \
+            --env TEMPORAL_TEST_EXPECT_DOCKER=true \
+            --volume "$RUNNER_TEMP:$RUNNER_TEMP" \
+            --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            --workdir "$GITHUB_WORKSPACE" \
+            ubuntu:24.04 \
+            "$integ_runner_binary" --test-executable "$integ_test_binary" \
+              worker_heartbeat_multiple_workers
 
   examples:
     name: "Build and run examples"
