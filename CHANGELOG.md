@@ -102,9 +102,8 @@ relevant information.
   `NexusOperationOptions::builder()` to construct Nexus operation options.
 * `WorkflowContext::wait_condition` now returns `Result<(), WorkflowCancellationError>` instead of
   `()` so that workflow cancellation can be propagated to the caller.
-* Activity failures now include the latest heartbeat details atomically instead of force-flushing a
-  throttled heartbeat first. Temporal Server 1.16.0 or newer is required to guarantee those details
-  are preserved on failure; workers warn when the server does not advertise support.
+* Workflow and activity implementations must now be registered through `WorkerOptions` before
+  constructing a `Worker`; the corresponding registration methods on `Worker` have been removed.
 * `Worker::run` now returns `WorkerRunError` instead of `anyhow::Error`.
   Non-validation failures are reported as `WorkerRunError::Fatal` with a message and source.
 
@@ -119,6 +118,9 @@ relevant information.
   tasks.
 * Workers with `max_cached_workflows` set to 0 no longer stall when a local activity resolves while
   the resolution for an earlier one is still being delivered.
+* Rust SDK workers now derive enabled task types from registered workflows and activities. The
+  task types can no longer be configured separately, preventing mismatched poll loops from hanging
+  worker shutdown.
 
 ## [0.6.0] - 2026-08-04
 
