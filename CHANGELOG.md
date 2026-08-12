@@ -102,6 +102,9 @@ relevant information.
   `NexusOperationOptions::builder()` to construct Nexus operation options.
 * `WorkflowContext::wait_condition` now returns `Result<(), WorkflowCancellationError>` instead of
   `()` so that workflow cancellation can be propagated to the caller.
+* `WorkflowUpdateWaitStage` and `WorkflowStartUpdateOptions::wait_for_stage` have been removed.
+  `start_update` now always waits for the update to be accepted; use `execute_update` to wait for
+  completion.
 * Workflow and activity implementations must now be registered through `WorkerOptions` before
   constructing a `Worker`; the corresponding registration methods on `Worker` have been removed.
 * `Worker::run` now returns `WorkerRunError` instead of `anyhow::Error`.
