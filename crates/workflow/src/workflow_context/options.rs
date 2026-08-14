@@ -2,7 +2,7 @@ use std::{collections::HashMap, time::Duration};
 
 use crate::{MemoValues, WorkflowCancellationToken, runtime::types::ContinueAsNewRequest};
 use temporalio_common_wasm::{
-    Priority, RetryPolicy,
+    ActivityCloseTimeouts, Priority, RetryPolicy,
     data_converters::{
         GenericPayloadConverter, PayloadConversionError, PayloadConverter, SerializationContext,
         SerializationContextData,
@@ -326,12 +326,12 @@ pub struct ActivityOptions {
 }
 
 impl ActivityOptions {
-    /// Returns a builder with `close_timeout` set to [`ActivityCloseTimeouts::StartToClose`].
+    /// Returns a builder with `close_timeouts` set to [`ActivityCloseTimeouts::StartToClose`].
     pub fn with_start_to_close_timeout(duration: Duration) -> ActivityOptionsBuilder {
         Self::with_close_timeouts(ActivityCloseTimeouts::StartToClose(duration))
     }
 
-    /// Returns a builder with `close_timeout` set to [`ActivityCloseTimeouts::ScheduleToClose`].
+    /// Returns a builder with `close_timeouts` set to [`ActivityCloseTimeouts::ScheduleToClose`].
     pub fn with_schedule_to_close_timeout(duration: Duration) -> ActivityOptionsBuilder {
         Self::with_close_timeouts(ActivityCloseTimeouts::ScheduleToClose(duration))
     }
@@ -351,43 +351,6 @@ impl ActivityOptions {
     }
 }
 
-/// The timeouts applied to an activity's completion.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ActivityCloseTimeouts {
-    /// Total time that a workflow is willing to wait for Activity to complete.
-    /// `ActivityCloseTimeouts::ScheduleToClose` limits the total time of an Activity's execution
-    /// including retries (use `ActivityCloseTimeouts::StartToClose` to limit the time of a single
-    /// attempt).
-    ScheduleToClose(Duration),
-    /// Maximum time of a single Activity execution attempt. Note that the Temporal Server doesn't
-    /// detect Worker process failures directly. It relies on this timeout to detect that an
-    /// Activity that didn't complete on time. So this timeout should be as short as the longest
-    /// possible execution of the Activity body. Potentially long running Activities must specify
-    /// `ActivityOptions::heartbeat_timeout` and heartbeat from the activity periodically for timely
-    /// failure detection.
-    StartToClose(Duration),
-    /// Applies both execution-attempt and overall-completion bounds.
-    Both {
-        /// Maximum time of a single Activity execution attempt.
-        start_to_close: Duration,
-        /// Total time that a workflow is willing to wait for Activity to complete.
-        schedule_to_close: Duration,
-    },
-}
-
-impl ActivityCloseTimeouts {
-    fn into_durations(self) -> (Option<Duration>, Option<Duration>) {
-        match self {
-            Self::ScheduleToClose(schedule_to_close) => (None, Some(schedule_to_close)),
-            Self::StartToClose(start_to_close) => (Some(start_to_close), None),
-            Self::Both {
-                start_to_close,
-                schedule_to_close,
-            } => (Some(start_to_close), Some(schedule_to_close)),
-        }
-    }
-}
-
 impl ActivityOptions {
     pub(crate) fn into_command(
         self,
@@ -396,8 +359,6 @@ impl ActivityOptions {
         args: Vec<Payload>,
         headers: HashMap<String, Payload>,
     ) -> WorkflowCommand {
-        let (start_to_close_timeout, schedule_to_close_timeout) =
-            self.close_timeouts.into_durations();
         command_with_metadata(
             workflow_command::Variant::ScheduleActivity(ScheduleActivity {
                 seq,
@@ -406,12 +367,16 @@ impl ActivityOptions {
                 task_queue: self.task_queue.unwrap_or_default(),
                 arguments: args,
                 headers,
-                schedule_to_close_timeout: schedule_to_close_timeout
+                schedule_to_close_timeout: self
+                    .close_timeouts
+                    .schedule_to_close()
                     .and_then(|duration| duration.try_into().ok()),
                 schedule_to_start_timeout: self
                     .schedule_to_start_timeout
                     .and_then(|duration| duration.try_into().ok()),
-                start_to_close_timeout: start_to_close_timeout
+                start_to_close_timeout: self
+                    .close_timeouts
+                    .start_to_close()
                     .and_then(|duration| duration.try_into().ok()),
                 heartbeat_timeout: self
                     .heartbeat_timeout
