@@ -3,6 +3,7 @@
 //! a diagram of the internals.
 
 mod driven_workflow;
+mod external_streams;
 mod history_update;
 mod machines;
 mod managed_run;
@@ -1443,6 +1444,14 @@ enum WFCommandVariant {
     UpdateResponse(UpdateResponse),
     ScheduleNexusOperation(ScheduleNexusOperation),
     RequestCancelNexusOperation(RequestCancelNexusOperation),
+    /// Commits an external stream observation delta. Never implies WFT retention.
+    ExternalStreamProgress(WorkflowStreamProgress),
+    /// Asks Core to retain the open WFT. Carries no annotation data.
+    ExternalStreamQuiescent(WorkflowStreamQuiescent),
+    /// Lang's answer to `PrepareExternalStreamPark`.
+    ExternalStreamParkResult(ExternalStreamParkResult),
+    /// Lang's answer to `FinalizeExternalStreams`.
+    ExternalStreamFinalized(ExternalStreamFinalized),
 }
 
 impl TryFrom<WorkflowCommand> for WFCommand {
@@ -1503,6 +1512,18 @@ impl TryFrom<WorkflowCommand> for WFCommand {
             }
             workflow_command::Variant::RequestCancelNexusOperation(s) => {
                 WFCommandVariant::RequestCancelNexusOperation(s)
+            }
+            workflow_command::Variant::WorkflowStreamProgress(s) => {
+                WFCommandVariant::ExternalStreamProgress(s)
+            }
+            workflow_command::Variant::WorkflowStreamQuiescent(s) => {
+                WFCommandVariant::ExternalStreamQuiescent(s)
+            }
+            workflow_command::Variant::ExternalStreamParkResult(s) => {
+                WFCommandVariant::ExternalStreamParkResult(s)
+            }
+            workflow_command::Variant::ExternalStreamFinalized(s) => {
+                WFCommandVariant::ExternalStreamFinalized(s)
             }
         };
         Ok(Self {
