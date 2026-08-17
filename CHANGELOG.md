@@ -33,6 +33,8 @@ relevant information.
 
 ## Unreleased
 
+## [0.7.0] - 2026-08-17
+
 ### Added
 * Support for running Standalone Activities in Rust SDK Worker.
 * Client methods for starting and managing execution of Standalone Activities. 
