@@ -34,6 +34,9 @@ relevant information.
 ## Unreleased
 
 ### Added
+* `WorkflowContext::all_handlers_finished` and `SyncWorkflowContext::all_handlers_finished` let
+  Rust workflows wait for active signal and update handler chains before completing or continuing
+  as new.
 * `WorkflowStartOptions::memo` attaches a non-indexed memo when starting a workflow, using the
   same `MemoValues` type already used by continue-as-new and `WorkflowContext::upsert_memo`.
   Values are serialized with the client's payload converter and codec, matching how `describe`
