@@ -50,6 +50,9 @@ relevant information.
   are preserved on failure; workers warn when the server does not advertise support.
 
 ### Fixed
+* Workers now warn when autoscaling task polling encounters errors continuously for one minute.
+  Repeated warnings use exponential backoff up to 15-minute intervals and stop after polling
+  recovers.
 * Workers no longer send worker heartbeats or appear in centralized heartbeat reports before they
   begin polling.
 * Ephemeral server processes no longer leak on failed start.
