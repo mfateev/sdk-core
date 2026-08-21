@@ -2594,7 +2594,7 @@ impl Future for LATimerBackoffFut {
                     .expect("duration converts ok"),
                 cancellation_token: Some(self.cancellation_token.clone()),
                 summary: None,
-                event_group_markers: vec![],
+                event_group_markers: self.la_opts.event_group_markers.clone(),
             });
             self.timer_fut = Some(Box::pin(timer_f));
             self.next_attempt = b.attempt;
@@ -3290,6 +3290,7 @@ mod tests {
             temporal::api::{
                 common::v1::{Payload, RetryPolicy as ProtoRetryPolicy},
                 enums::v1::ContinueAsNewVersioningBehavior as ProtoContinueAsNewVersioningBehavior,
+                sdk::v1::{EventGroupMarker, event_group_marker},
             },
         },
     };
@@ -3734,8 +3735,17 @@ mod tests {
             Vec::new(),
         );
         let token = WorkflowCancellationToken::new();
+        let marker = EventGroupMarker {
+            variant: Some(event_group_marker::Variant::Label(
+                event_group_marker::Label {
+                    id: "la-group".to_string(),
+                    label: Some("la-group".as_json_payload().unwrap()),
+                },
+            )),
+        };
         let mut options = LocalActivityOptions {
             schedule_to_close_timeout: Some(Duration::from_secs(10)),
+            event_group_markers: vec![marker.clone()],
             ..Default::default()
         };
         options.cancellation_token = Some(token.clone());
@@ -3761,12 +3771,19 @@ mod tests {
         let commands = host.commands.borrow();
         assert!(commands.iter().any(|command| matches!(
             &command.variant,
-            Some(workflow_command::Variant::StartTimer(_))
-        )));
-        assert!(commands.iter().any(|command| matches!(
-            &command.variant,
             Some(workflow_command::Variant::CancelTimer(_))
         )));
+
+        let start_timer = commands
+            .iter()
+            .find(|command| {
+                matches!(
+                    &command.variant,
+                    Some(workflow_command::Variant::StartTimer(_))
+                )
+            })
+            .expect("backoff StartTimer is issued");
+        assert_eq!(start_timer.event_group_markers, [marker]);
     }
 
     #[test]
