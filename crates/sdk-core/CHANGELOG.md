@@ -48,6 +48,8 @@ relevant information.
   are preserved on failure; workers warn when the server does not advertise support.
 
 ### Fixed
+* Workers now defensively buffer a replacement workflow task if it reaches a run that still owns
+  one, preserving the outstanding task token in release builds.
 * Workers no longer send worker heartbeats or appear in centralized heartbeat reports before they
   begin polling.
 * Ephemeral server processes no longer leak on failed start.
