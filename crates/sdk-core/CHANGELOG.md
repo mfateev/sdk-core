@@ -34,6 +34,9 @@ relevant information.
 ## Unreleased
 
 ### Added
+* Added the Core protocol for replay-safe Workflow-originated external stream output, including
+  exact Workflow Task History floors, compact staged-output marker proofs, and shared input/output
+  replay segmentation.
 * Core console logs can now be emitted as newline-delimited JSON when an SDK selects the JSON log
   format. Configured log filters continue to apply to JSON output.
 * Worker heartbeats now report the SDK runtime, hosting environments, operating system, and
