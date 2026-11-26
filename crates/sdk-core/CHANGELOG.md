@@ -42,6 +42,8 @@ relevant information.
 * A cancellation request for an already terminated Child Workflow no longer fails the parent Workflow Task.
 * Canceling an external Workflow Signal whose delivery has already failed no longer fails the
   sending Workflow Task.
+* A Child Workflow with `WAIT_CANCELLATION_REQUESTED` now resolves as canceled when the server
+  acknowledges the cancellation request. Existing histories retain their recorded replay behavior.
 
 ## [0.12.0] - 2026-11-23
 
