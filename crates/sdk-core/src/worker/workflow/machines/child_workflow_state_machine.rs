@@ -111,6 +111,14 @@ fsm! {
     TimedOut --(Cancel(String)) --> TimedOut;
     Completed --(Cancel(String)) --> Completed;
     Terminated --(Cancel(String)) --> Terminated;
+
+    // The child can resolve while the server is delivering the cancellation request.
+    Cancelled --(CancelRequestAcknowledged) --> Cancelled;
+    Failed --(CancelRequestAcknowledged) --> Failed;
+    StartFailed --(CancelRequestAcknowledged) --> StartFailed;
+    TimedOut --(CancelRequestAcknowledged) --> TimedOut;
+    Completed --(CancelRequestAcknowledged) --> Completed;
+    Terminated --(CancelRequestAcknowledged) --> Terminated;
 }
 
 pub(super) struct ChildWorkflowExecutionStartedEvent {
@@ -549,14 +557,10 @@ impl ChildWorkflowMachine {
     pub(super) fn cancel_request_acknowledged(
         &mut self,
     ) -> Result<Vec<MachineResponse>, WFMachinesError> {
-        if !matches!(
-            self.state(),
-            ChildWorkflowMachineState::StartEventRecorded(_)
-                | ChildWorkflowMachineState::Started(_)
-        ) {
-            return Ok(vec![]);
-        }
-        let commands = self.on_event_mut(ChildWorkflowMachineEvents::CancelRequestAcknowledged)?;
+        let commands = OnEventWrapper::on_event_mut(
+            self,
+            ChildWorkflowMachineEvents::CancelRequestAcknowledged,
+        )?;
         process_machine_commands(self, commands, None)
     }
 
